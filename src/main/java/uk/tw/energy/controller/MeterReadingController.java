@@ -1,7 +1,9 @@
 package uk.tw.energy.controller;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -48,5 +50,15 @@ public class MeterReadingController {
         return readings.isPresent()
                 ? ResponseEntity.ok(readings.get())
                 : ResponseEntity.notFound().build();
+    }
+
+    @GetMapping("/export/{smartMeterId}")
+    public void exportReadingsAsCsv(@PathVariable String smartMeterId, HttpServletResponse response) throws IOException {
+        response.setContentType("text/csv");
+        response.setHeader("Content-Disposition", "attachment; filename=\"readings.csv\"");
+
+        if (!meterReadingService.writeReadingsAsCsv(smartMeterId, response.getWriter())) {
+            response.setStatus(HttpStatus.NOT_FOUND.value());
+        }
     }
 }
