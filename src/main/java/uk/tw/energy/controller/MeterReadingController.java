@@ -8,10 +8,12 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.http.HttpHeaders;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import uk.tw.energy.domain.ElectricityReading;
 import uk.tw.energy.domain.MeterReadings;
+import uk.tw.energy.service.CsvService;
 import uk.tw.energy.service.MeterReadingService;
 
 @RestController
@@ -19,9 +21,11 @@ import uk.tw.energy.service.MeterReadingService;
 public class MeterReadingController {
 
     private final MeterReadingService meterReadingService;
+    private final CsvService csvService;
 
-    public MeterReadingController(MeterReadingService meterReadingService) {
+    public MeterReadingController(MeterReadingService meterReadingService, CsvService csvService) {
         this.meterReadingService = meterReadingService;
+        this.csvService = csvService;
     }
 
     @PostMapping("/store")
@@ -48,5 +52,20 @@ public class MeterReadingController {
         return readings.isPresent()
                 ? ResponseEntity.ok(readings.get())
                 : ResponseEntity.notFound().build();
+    }
+
+    @GetMapping("/export/{smartMeterId}")
+    public ResponseEntity<String> exportReadings(@PathVariable String smartMeterId) {
+        Optional<List<ElectricityReading>> readings = meterReadingService.getReadings(smartMeterId);
+        if (readings.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        String csv = csvService.generateCsv(readings.get());
+        HttpHeaders headers = new HttpHeaders();
+        headers.add(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + smartMeterId + "-readings.csv");
+        headers.add(HttpHeaders.CONTENT_TYPE, "text/csv");
+
+        return ResponseEntity.ok().headers(headers).body(csv);
     }
 }
