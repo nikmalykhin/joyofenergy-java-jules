@@ -1,5 +1,6 @@
 package uk.tw.energy.controller;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.http.HttpStatus;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import uk.tw.energy.domain.ElectricityReading;
 import uk.tw.energy.domain.MeterReadings;
+import uk.tw.energy.service.CsvExportService;
 import uk.tw.energy.service.MeterReadingService;
 
 @RestController
@@ -19,9 +21,12 @@ import uk.tw.energy.service.MeterReadingService;
 public class MeterReadingController {
 
     private final MeterReadingService meterReadingService;
+    private final CsvExportService csvExportService;
 
-    public MeterReadingController(MeterReadingService meterReadingService) {
+    public MeterReadingController(
+            MeterReadingService meterReadingService, CsvExportService csvExportService) {
         this.meterReadingService = meterReadingService;
+        this.csvExportService = csvExportService;
     }
 
     @PostMapping("/store")
@@ -48,5 +53,19 @@ public class MeterReadingController {
         return readings.isPresent()
                 ? ResponseEntity.ok(readings.get())
                 : ResponseEntity.notFound().build();
+    }
+
+    @GetMapping(value = "/export/{smartMeterId}", produces = "text/csv")
+    public ResponseEntity<String> exportReadings(@PathVariable String smartMeterId) {
+        Optional<List<ElectricityReading>> readings = meterReadingService.getReadings(smartMeterId);
+        if (readings.isEmpty() || readings.get().isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        try {
+            return ResponseEntity.ok(csvExportService.export(readings.get()));
+        } catch (IOException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
     }
 }
