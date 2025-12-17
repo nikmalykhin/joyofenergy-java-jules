@@ -11,7 +11,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import uk.tw.energy.builders.MeterReadingsBuilder;
 import uk.tw.energy.domain.ElectricityReading;
+import java.math.BigDecimal;
+import java.time.Instant;
 import uk.tw.energy.domain.MeterReadings;
+import uk.tw.energy.service.CsvService;
 import uk.tw.energy.service.MeterReadingService;
 
 public class MeterReadingControllerTest {
@@ -19,11 +22,13 @@ public class MeterReadingControllerTest {
     private static final String SMART_METER_ID = "10101010";
     private MeterReadingController meterReadingController;
     private MeterReadingService meterReadingService;
+    private CsvService csvService;
 
     @BeforeEach
     public void setUp() {
         this.meterReadingService = new MeterReadingService(new HashMap<>());
-        this.meterReadingController = new MeterReadingController(meterReadingService);
+        this.csvService = new CsvService();
+        this.meterReadingController = new MeterReadingController(meterReadingService, csvService);
     }
 
     @Test
@@ -92,5 +97,27 @@ public class MeterReadingControllerTest {
     public void givenMeterIdThatIsNotRecognisedShouldReturnNotFound() {
         assertThat(meterReadingController.readReadings(SMART_METER_ID).getStatusCode())
                 .isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    public void givenMeterIdThatIsRecognisedShouldReturnCsv() {
+        MeterReadings meterReadings = new MeterReadingsBuilder()
+                .setSmartMeterId(SMART_METER_ID)
+                .generateElectricityReadings()
+                .build();
+        meterReadingController.storeReadings(meterReadings);
+
+        var response = meterReadingController.exportReadingsAsCsv(SMART_METER_ID);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getHeaders().getContentType().toString()).isEqualTo("text/csv");
+        assertThat(response.getHeaders().getContentDisposition().toString()).isEqualTo("attachment; filename=\"10101010.csv\"");
+
+        String expectedCsv = "Time,Reading\n" +
+                meterReadings.electricityReadings().stream()
+                        .map(r -> r.time() + "," + r.reading())
+                        .reduce((a, b) -> a + "\n" + b)
+                        .get() + "\n";
+        assertThat(response.getBody()).isEqualTo(expectedCsv);
     }
 }
