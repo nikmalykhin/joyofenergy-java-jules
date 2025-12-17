@@ -9,9 +9,12 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
+import java.math.BigDecimal;
+import java.time.Instant;
 import uk.tw.energy.builders.MeterReadingsBuilder;
 import uk.tw.energy.domain.ElectricityReading;
 import uk.tw.energy.domain.MeterReadings;
+import uk.tw.energy.service.CsvService;
 import uk.tw.energy.service.MeterReadingService;
 
 public class MeterReadingControllerTest {
@@ -19,11 +22,13 @@ public class MeterReadingControllerTest {
     private static final String SMART_METER_ID = "10101010";
     private MeterReadingController meterReadingController;
     private MeterReadingService meterReadingService;
+    private CsvService csvService;
 
     @BeforeEach
     public void setUp() {
         this.meterReadingService = new MeterReadingService(new HashMap<>());
-        this.meterReadingController = new MeterReadingController(meterReadingService);
+        this.csvService = new CsvService();
+        this.meterReadingController = new MeterReadingController(meterReadingService, csvService);
     }
 
     @Test
@@ -92,5 +97,29 @@ public class MeterReadingControllerTest {
     public void givenMeterIdThatIsNotRecognisedShouldReturnNotFound() {
         assertThat(meterReadingController.readReadings(SMART_METER_ID).getStatusCode())
                 .isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    public void givenMeterIdThatHasReadingsShouldReturnCsv() {
+        // Arrange
+        Instant now = Instant.now();
+        List<ElectricityReading> readings = List.of(
+                new ElectricityReading(now.minusSeconds(3600), BigDecimal.valueOf(10.0)),
+                new ElectricityReading(now, BigDecimal.valueOf(20.0))
+        );
+        meterReadingService.storeReadings(SMART_METER_ID, readings);
+
+        // Act
+        var response = meterReadingController.exportReadings(SMART_METER_ID);
+
+        // Assert
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getHeaders().getContentType().toString()).isEqualTo("text/csv");
+        assertThat(response.getHeaders().getContentDisposition().toString()).isEqualTo("attachment; filename=\"10101010-readings.csv\"");
+
+        String expectedCsv = "time,reading\n" +
+                now.minusSeconds(3600) + ",10.0\n" +
+                now + ",20.0";
+        assertThat(response.getBody()).isEqualTo(expectedCsv);
     }
 }
